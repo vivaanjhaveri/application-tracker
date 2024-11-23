@@ -1,5 +1,5 @@
-### Job Application Tracking System
-# By Vivaan Jhaveri
+# Job Application Tracking System
+### By Vivaan Jhaveri
 
 ## Description
 A web application designed to help co-op students and job seekers in STEM fields efficiently manage and track their job applications in Vancouver, Canada. This system provides an intuitive interface for adding and updating job applications, visualizing application progress through interactive charts, and analyzing application data for insights.
