@@ -132,7 +132,36 @@ def visualize_progress_interactive(applications_df):
 #########################
 # Main Streamlit App
 #########################
+def view_applications_table(applications_df):
+    """
+    Display applications in a color-coded Pandas table for a better visual experience.
+    """
+    st.subheader("All Job Applications")
 
+    if 'id' in applications_df.columns:
+        applications_df = applications_df.drop(columns=['id'])
+
+    if 'application_date' in applications_df.columns:
+        applications_df['application_date'] = pd.to_datetime(applications_df['application_date'], errors='coerce')
+        applications_df = applications_df.sort_values(by="application_date", ascending=False)
+
+    def highlight_status(row):
+        status = str(row['status'])
+        if status == 'Rejected':
+            return ['background-color: #f8d7da'] * len(row)
+        elif status == 'Offered':
+            return ['background-color: #d4edda'] * len(row)
+        elif status == 'Interviewed':
+            return ['background-color: #fff3cd'] * len(row)
+        elif status == 'Applied':
+            return ['background-color: #dbeafe'] * len(row)
+        else:
+            return [''] * len(row)
+
+    styled_df = applications_df.style.apply(highlight_status, axis=1)
+
+    st.write(styled_df)
+    
 def main():
     st.set_page_config(page_title="Job Application Tracker", layout="wide")
     st.title("📊 Job Application Tracking System")
@@ -220,11 +249,10 @@ def main():
     elif choice == "View Applications":
         applications_df = get_all_applications()
         if not applications_df.empty:
-            # Drop the 'id' column before display
-            df_no_id = applications_df.drop(columns=['id'])
-            view_applications_expanded(df_no_id)
+            view_applications_table(applications_df)
         else:
             st.info("No applications found. Please add some applications first.")
+
 
     # 4. Visualize Progress (Interactive Charts)
     elif choice == "Visualize Progress":
