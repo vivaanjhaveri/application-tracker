@@ -2,11 +2,16 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+import plotly.express as px
 from database import create_connection
 
 # Initialize the database connection
 conn = create_connection()
 cursor = conn.cursor()
+
+#########################
+# Database Functions
+#########################
 
 # Function to add a new application
 def add_application(company_name, position, application_date, status, notes):
@@ -32,12 +37,107 @@ def get_all_applications():
     columns = [description[0] for description in cursor.description]
     return pd.DataFrame(data, columns=columns)
 
-# Streamlit App
+#########################
+# Enhanced View Section
+#########################
+
+def view_applications_expanded(applications_df):
+    """
+    Display applications using Streamlit expanders for a more intuitive view.
+    Each application is wrapped in an expander showing key details.
+    """
+    st.subheader("All Job Applications (Enhanced View)")
+    # Sort by application_date (descending) to see recent applications first
+    applications_df = applications_df.sort_values(by="application_date", ascending=False)
+
+    for _, row in applications_df.iterrows():
+        with st.expander(f"{row['company_name']} - {row['position']} ({row['status']})", expanded=False):
+            st.write(f"**Application Date:** {row['application_date']}")
+            st.write(f"**Notes:** {row['notes'] if row['notes'] else 'N/A'}")
+
+#########################
+# Interactive Visualization Section
+#########################
+
+def visualize_progress_interactive(applications_df):
+    """
+    Show interactive charts (pie, line) using Plotly, matching Streamlit's background.
+    """
+
+    # Ensure 'application_date' is a datetime
+    applications_df['application_date'] = pd.to_datetime(applications_df['application_date'])
+
+    st.subheader("Interactive Application Progress Visualization")
+
+    # --- Pie Chart: Applications by Status ---
+    st.write("### Applications by Status (Pie Chart)")
+    status_count = applications_df['status'].value_counts().reset_index()
+    status_count.columns = ['Status', 'Count']
+
+    fig_status = px.pie(
+        status_count,
+        names='Status',
+        values='Count',
+        title="Distribution of Applications by Status",
+        template='plotly_white'  # Use a clean template
+    )
+    # Match chart background with the page background
+    fig_status.update_layout(
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)'
+    )
+    st.plotly_chart(fig_status, use_container_width=True)
+
+    st.write("---")
+
+    # --- Line Chart: Applications Over Time ---
+    st.write("### Applications Over Time (Line Chart)")
+    apps_over_time = applications_df.groupby('application_date').size().reset_index(name='Counts')
+    fig_line = px.line(
+        apps_over_time,
+        x='application_date',
+        y='Counts',
+        markers=True,
+        title="Number of Applications Submitted Over Time",
+        template='plotly_white'
+    )
+    fig_line.update_layout(
+        xaxis_title="Application Date",
+        yaxis_title="Number of Applications",
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)'
+    )
+    st.plotly_chart(fig_line, use_container_width=True)
+
+    st.write("---")
+
+    # --- Pie Chart: Applications by Company ---
+    st.write("### Applications by Company (Pie Chart)")
+    company_count = applications_df['company_name'].value_counts().reset_index()
+    company_count.columns = ['Company Name', 'Count']
+
+    fig_company = px.pie(
+        company_count,
+        names='Company Name',
+        values='Count',
+        title="Distribution of Applications by Company",
+        template='plotly_white'
+    )
+    fig_company.update_layout(
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)'
+    )
+    st.plotly_chart(fig_company, use_container_width=True)
+
+#########################
+# Main Streamlit App
+#########################
+
 def main():
     st.set_page_config(page_title="Job Application Tracker", layout="wide")
     st.title("📊 Job Application Tracking System")
 
-    # Inject custom CSS to hide the blinking cursor
+    # Inject custom CSS to hide the blinking cursor (optional)
     hide_cursor_style = """
         <style>
         input, textarea {
@@ -47,9 +147,11 @@ def main():
     """
     st.markdown(hide_cursor_style, unsafe_allow_html=True)
 
+    # Navigation Menu
     menu = ["Add Application", "Update Application", "View Applications", "Visualize Progress"]
     choice = st.sidebar.selectbox("Navigation", menu)
 
+    # 1. Add Application
     if choice == "Add Application":
         st.subheader("Add New Job Application")
 
@@ -69,6 +171,7 @@ def main():
             else:
                 st.error("Please enter both Company Name and Position.")
 
+    # 2. Update Application
     elif choice == "Update Application":
         st.subheader("Update Existing Application")
         applications_df = get_all_applications()
@@ -113,57 +216,22 @@ def main():
         else:
             st.info("No applications found. Please add some applications first.")
 
+    # 3. View Applications (Enhanced)
     elif choice == "View Applications":
-        st.subheader("All Job Applications")
         applications_df = get_all_applications()
         if not applications_df.empty:
-            st.dataframe(applications_df.drop(columns=['id']))
+            # Drop the 'id' column before display
+            df_no_id = applications_df.drop(columns=['id'])
+            view_applications_expanded(df_no_id)
         else:
             st.info("No applications found. Please add some applications first.")
 
+    # 4. Visualize Progress (Interactive Charts)
     elif choice == "Visualize Progress":
-        st.subheader("Application Progress Visualization")
         applications_df = get_all_applications()
 
         if not applications_df.empty:
-            # Convert application_date to datetime
-            applications_df['application_date'] = pd.to_datetime(applications_df['application_date'])
-
-            # Create columns for layout
-            col1, col2 = st.columns(2)
-
-            with col1:
-                # Status Count Plot
-                st.write("#### Applications by Status")
-                status_count = applications_df['status'].value_counts().reset_index()
-                status_count.columns = ['Status', 'Count']
-                fig1, ax1 = plt.subplots()
-                sns.barplot(x='Status', y='Count', data=status_count, ax=ax1, palette='Blues_d')
-                ax1.set_xlabel("Status")
-                ax1.set_ylabel("Count")
-                st.pyplot(fig1)
-
-            with col2:
-                # Applications Over Time
-                st.write("#### Applications Over Time")
-                applications_over_time = applications_df.groupby('application_date').size().reset_index(name='Counts')
-                fig2, ax2 = plt.subplots()
-                sns.lineplot(x='application_date', y='Counts', data=applications_over_time, marker="o", ax=ax2)
-                ax2.set_xlabel("Application Date")
-                ax2.set_ylabel("Number of Applications")
-                plt.xticks(rotation=45)
-                st.pyplot(fig2)
-
-            # Applications by Company
-            st.write("#### Applications by Company")
-            company_count = applications_df['company_name'].value_counts().reset_index()
-            company_count.columns = ['Company Name', 'Count']
-            fig3, ax3 = plt.subplots()
-            sns.barplot(y='Company Name', x='Count', data=company_count, ax=ax3, palette='viridis')
-            ax3.set_xlabel("Count")
-            ax3.set_ylabel("Company Name")
-            st.pyplot(fig3)
-
+            visualize_progress_interactive(applications_df)
         else:
             st.info("No applications found. Please add some applications first.")
 
