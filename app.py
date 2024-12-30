@@ -13,7 +13,6 @@ cursor = conn.cursor()
 # Database Functions
 #########################
 
-# Function to add a new application
 def add_application(company_name, position, application_date, status, notes):
     cursor.execute('''
     INSERT INTO applications (company_name, position, application_date, status, notes)
@@ -21,7 +20,6 @@ def add_application(company_name, position, application_date, status, notes):
     ''', (company_name, position, application_date, status, notes))
     conn.commit()
 
-# Function to update an existing application
 def update_application(app_id, status, notes):
     cursor.execute('''
     UPDATE applications
@@ -30,7 +28,6 @@ def update_application(app_id, status, notes):
     ''', (status, notes, app_id))
     conn.commit()
 
-# Function to fetch all applications
 def get_all_applications():
     cursor.execute('SELECT * FROM applications')
     data = cursor.fetchall()
@@ -38,50 +35,99 @@ def get_all_applications():
     return pd.DataFrame(data, columns=columns)
 
 #########################
-# Enhanced View Section
+# View Applications (Stylized Table)
 #########################
 
-def view_applications_expanded(applications_df):
+def view_applications_table(applications_df):
     """
-    Display applications using Streamlit expanders for a more intuitive view.
-    Each application is wrapped in an expander showing key details.
+    Display applications in a color-coded Pandas table with black text.
     """
-    st.subheader("All Job Applications (Enhanced View)")
-    # Sort by application_date (descending) to see recent applications first
-    applications_df = applications_df.sort_values(by="application_date", ascending=False)
+    st.subheader("All Job Applications")
 
-    for _, row in applications_df.iterrows():
-        with st.expander(f"{row['company_name']} - {row['position']} ({row['status']})", expanded=False):
-            st.write(f"**Application Date:** {row['application_date']}")
-            st.write(f"**Notes:** {row['notes'] if row['notes'] else 'N/A'}")
+    # Drop the 'id' column if it exists
+    if 'id' in applications_df.columns:
+        applications_df = applications_df.drop(columns=['id'])
+
+    # Convert application_date to datetime and sort descending if applicable
+    if 'application_date' in applications_df.columns:
+        applications_df['application_date'] = pd.to_datetime(applications_df['application_date'], errors='coerce')
+        applications_df = applications_df.sort_values(by="application_date", ascending=False)
+
+    # Define background colors for each status
+    def highlight_status(row):
+        status = str(row['status'])
+        if status == 'Rejected':
+            return ['background-color: #f8d7da; color: black'] * len(row)
+        elif status == 'Offered':
+            return ['background-color: #d4edda; color: black'] * len(row)
+        elif status == 'Interviewed':
+            return ['background-color: #fff3cd; color: black'] * len(row)
+        elif status == 'Applied':
+            return ['background-color: #dbeafe; color: black'] * len(row)
+        else:
+            # Default: Keep black text, no special bg color
+            return ['color: black'] * len(row)
+
+    styled_df = applications_df.style.apply(highlight_status, axis=1)
+    # Force text color to black overall (in case columns not covered by highlight_status)
+    styled_df = styled_df.set_properties(**{'color': 'black'})
+
+    st.write(styled_df)
 
 #########################
-# Interactive Visualization Section
+# Visualize Progress
 #########################
 
 def visualize_progress_interactive(applications_df):
     """
-    Show interactive charts (pie, line) using Plotly, matching Streamlit's background.
+    Show interactive charts (pie/line) using Plotly, plus summary statistics.
     """
+    st.subheader("Application Progress Visualization")
 
-    # Ensure 'application_date' is a datetime
+    # Ensure 'application_date' is datetime
     applications_df['application_date'] = pd.to_datetime(applications_df['application_date'])
 
-    st.subheader("Interactive Application Progress Visualization")
+    # 1. Display Summary Statistics
+    st.write("### Key Statistics")
 
-    # --- Pie Chart: Applications by Status ---
+    total_applications = len(applications_df)
+
+    # Count how many times each status appears
+    status_counts = applications_df['status'].value_counts()
+    rejected_count = status_counts.get('Rejected', 0)
+    interviewed_count = status_counts.get('Interviewed', 0)
+    offered_count = status_counts.get('Offered', 0)
+    applied_count = status_counts.get('Applied', 0)
+
+    # Example additional stats:
+    # - Count by position or company
+    top_company = applications_df['company_name'].value_counts().idxmax() if not applications_df.empty else "N/A"
+    top_position = applications_df['position'].value_counts().idxmax() if not applications_df.empty else "N/A"
+
+    col1, col2, col3, col4, col5, col6 = st.columns(6)
+    col1.metric("Total Applications", total_applications)
+    col2.metric("Rejected", rejected_count)
+    col3.metric("Interviewed", interviewed_count)
+    col4.metric("Offered", offered_count)
+    col5.metric("Applied", applied_count)
+    col6.metric("Most Common Company", top_company)
+
+    st.write(f"Most Common Position: **{top_position}**")
+
+    st.write("---")
+
+    # 2. Pie Chart: Applications by Status
     st.write("### Applications by Status (Pie Chart)")
-    status_count = applications_df['status'].value_counts().reset_index()
-    status_count.columns = ['Status', 'Count']
+    status_count_df = status_counts.reset_index()
+    status_count_df.columns = ['Status', 'Count']
 
     fig_status = px.pie(
-        status_count,
+        status_count_df,
         names='Status',
         values='Count',
         title="Distribution of Applications by Status",
-        template='plotly_white'  # Use a clean template
+        template='plotly_white'
     )
-    # Match chart background with the page background
     fig_status.update_layout(
         paper_bgcolor='rgba(0,0,0,0)',
         plot_bgcolor='rgba(0,0,0,0)'
@@ -90,7 +136,7 @@ def visualize_progress_interactive(applications_df):
 
     st.write("---")
 
-    # --- Line Chart: Applications Over Time ---
+    # 3. Line Chart: Applications Over Time
     st.write("### Applications Over Time (Line Chart)")
     apps_over_time = applications_df.groupby('application_date').size().reset_index(name='Counts')
     fig_line = px.line(
@@ -111,13 +157,13 @@ def visualize_progress_interactive(applications_df):
 
     st.write("---")
 
-    # --- Pie Chart: Applications by Company ---
+    # 4. Pie Chart: Applications by Company
     st.write("### Applications by Company (Pie Chart)")
-    company_count = applications_df['company_name'].value_counts().reset_index()
-    company_count.columns = ['Company Name', 'Count']
+    company_counts = applications_df['company_name'].value_counts().reset_index()
+    company_counts.columns = ['Company Name', 'Count']
 
     fig_company = px.pie(
-        company_count,
+        company_counts,
         names='Company Name',
         values='Count',
         title="Distribution of Applications by Company",
@@ -132,41 +178,12 @@ def visualize_progress_interactive(applications_df):
 #########################
 # Main Streamlit App
 #########################
-def view_applications_table(applications_df):
-    """
-    Display applications in a color-coded Pandas table for a better visual experience.
-    """
-    st.subheader("All Job Applications")
 
-    if 'id' in applications_df.columns:
-        applications_df = applications_df.drop(columns=['id'])
-
-    if 'application_date' in applications_df.columns:
-        applications_df['application_date'] = pd.to_datetime(applications_df['application_date'], errors='coerce')
-        applications_df = applications_df.sort_values(by="application_date", ascending=False)
-
-    def highlight_status(row):
-        status = str(row['status'])
-        if status == 'Rejected':
-            return ['background-color: #f8d7da'] * len(row)
-        elif status == 'Offered':
-            return ['background-color: #d4edda'] * len(row)
-        elif status == 'Interviewed':
-            return ['background-color: #fff3cd'] * len(row)
-        elif status == 'Applied':
-            return ['background-color: #dbeafe'] * len(row)
-        else:
-            return [''] * len(row)
-
-    styled_df = applications_df.style.apply(highlight_status, axis=1)
-
-    st.write(styled_df)
-    
 def main():
     st.set_page_config(page_title="Job Application Tracker", layout="wide")
     st.title("📊 Job Application Tracking System")
 
-    # Inject custom CSS to hide the blinking cursor (optional)
+    # Optional: Hide blinking cursor
     hide_cursor_style = """
         <style>
         input, textarea {
@@ -180,7 +197,6 @@ def main():
     menu = ["Add Application", "Update Application", "View Applications", "Visualize Progress"]
     choice = st.sidebar.selectbox("Navigation", menu)
 
-    # 1. Add Application
     if choice == "Add Application":
         st.subheader("Add New Job Application")
 
@@ -200,13 +216,12 @@ def main():
             else:
                 st.error("Please enter both Company Name and Position.")
 
-    # 2. Update Application
     elif choice == "Update Application":
         st.subheader("Update Existing Application")
         applications_df = get_all_applications()
 
         if not applications_df.empty:
-            # Create a user-friendly dropdown menu
+            # User-friendly dropdown
             applications_df['display'] = applications_df.apply(
                 lambda row: f"{row['company_name']} - {row['position']} [{row['status']}]",
                 axis=1
@@ -241,11 +256,9 @@ def main():
             if update_button:
                 update_application(app_id, new_status, new_notes)
                 st.success("Application updated successfully!")
-
         else:
             st.info("No applications found. Please add some applications first.")
 
-    # 3. View Applications (Enhanced)
     elif choice == "View Applications":
         applications_df = get_all_applications()
         if not applications_df.empty:
@@ -253,11 +266,8 @@ def main():
         else:
             st.info("No applications found. Please add some applications first.")
 
-
-    # 4. Visualize Progress (Interactive Charts)
     elif choice == "Visualize Progress":
         applications_df = get_all_applications()
-
         if not applications_df.empty:
             visualize_progress_interactive(applications_df)
         else:
