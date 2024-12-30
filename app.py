@@ -48,7 +48,7 @@ def main():
     st.markdown(hide_cursor_style, unsafe_allow_html=True)
 
     menu = ["Add Application", "Update Application", "View Applications", "Visualize Progress"]
-    choice = st.sidebar.button("Navigation", menu)
+    choice = st.sidebar.dropdown("Navigation", menu)
 
     if choice == "Add Application":
         st.subheader("Add New Job Application")
